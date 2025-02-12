@@ -1,0 +1,209 @@
+#include <iostream>
+
+using namespace std;
+
+bool NAND(bool a, bool b);
+bool NOT(bool a);
+bool OR(bool a, bool b);
+bool AND(bool a, bool b);
+bool XOR(bool a, bool b);
+bool NOR(bool a, bool b);
+void Shifter(bool A[8], bool Cntr);
+void Hadder(bool a, bool b, bool& carry, bool& sum);
+void Fadder(bool a, bool b, bool Cin, bool& Cout, bool& sum);
+void dekoderis(bool D[3], bool dekod[8]);
+void bit1ALU(bool a, bool b, bool ENA, bool ENB, bool Cin, bool M0, bool M1, bool& Out, bool& Cout);
+void MUX(bool rez1, bool rez2, bool rez3, bool rez4, bool M0, bool M1, bool& Out, bool &Cout);
+
+int main()
+{
+    bool A[8]{ 1,1,1,1,0,1,0,1 }, B[8]{ 0,0,0,0,0,1,0,0 }, D[3]{ 1,0,0 }, ats[8];
+    bool ENA = 1, ENB = 1, Cin=0, M0, M1, Out=0, Cout=0, Cntr = 1;
+    bool dekod[8];
+
+    //8-bit ALU vykdymas
+
+    dekoderis(D, dekod);
+    if (dekod[0] == 1 || dekod[6] == 1 || dekod[7] == 1)//Dekoderis kai operacijos nera
+    {
+        cout << "Operacijos nera. " << endl;
+        return 0;
+    }
+    if (dekod[1] == 1) //Dekoderis kai skaiciu reikia paversti neigiamu
+    {
+        M0 = 0; M1 = 0;
+        bool AddOne[8]{ 0,0,0,0,0,0,0,1 };
+        for (int i = 0; i < 8; i++)
+        {
+            bit1ALU(A[i], B[i], ENA, ENB, Cin, M0, M1, Out, Cout);
+            A[i] = Out;
+        }
+        M0 = 1; M1 = 1;
+        Cout = 0;
+        for (int i = 7; i >= 0; i--)
+        {
+            Cin = Cout;
+            bit1ALU(A[i], AddOne[i], ENA, ENB, Cin, M0, M1, Out, Cout);
+            ats[i] = Out;
+        }
+        cout << "-A: " << endl;
+        for (int i = 0; i < 8; i++)
+            cout << ats[i] << " ";
+
+    }
+    if (dekod[2] == 1)//Dekoderis kai reikia palyginti skaicius
+    {
+        bool ATS;
+        M0 = 1; M1 = 0;
+        for (int i = 0; i < 8; i++)
+        {
+            bit1ALU(A[i], B[i], ENA, ENB, Cin, M0, M1, Out, Cout);
+            ats[i] = Out;
+        }
+        ATS = NOT(OR(OR(OR(ats[0], ats[1]), OR(ats[2], ats[3])), OR(OR(ats[4], ats[5]), OR(ats[6], ats[7]))));
+        cout << ATS;
+    }
+    if (dekod[3] == 1)//Dekoderis kai skaicius reikia sudeti
+    {
+        M0 = 1; M1 = 1;
+        for (int i = 7; i >= 0; i--)
+        {
+            Cin = Cout;
+            bit1ALU(A[i], B[i], ENA, ENB, Cin, M0, M1, Out, Cout);
+            ats[i] = Out;
+
+        }
+        cout << "Suma: " << endl;
+        for(int i = 0; i < 8; i++)
+            cout << ats[i] << " ";
+        cout << endl  << "Carry flag: " << Cout << endl;
+    }
+    if (dekod[4] == 1)//Dekoderis kai skaicius reikia sudauginti
+    {
+        bool ats[8]{0,0,0,0,0,0,0,0};
+        while (OR(OR(OR(B[0], B[1]), OR(B[2], B[3])), OR(OR(B[4], B[5]), OR(B[6], B[7])))==1)
+        {
+            if (B[7] == 0)
+            {
+                Cntr = 0;
+                Shifter(B, Cntr);
+                Cntr = 1;
+                Shifter(A, Cntr);
+            }
+            else
+            {
+                M0 = 1; M1 = 1;
+                for (int i = 7; i >= 0; i--)
+                {
+                    Cin = Cout;
+                    bit1ALU(ats[i], A[i], ENA, ENB, Cin, M0, M1, Out, Cout);
+                    ats[i] = Out;
+                    cout << "COUT: " << Cin << endl;
+                }
+                Cntr = 0;
+                Shifter(B, Cntr);
+                Cntr = 1;
+                Shifter(A, Cntr);
+            }
+        }
+        cout << "Sandauga: " << endl;
+        for (int i = 0; i < 8; i++)
+            cout << ats[i] << " ";
+    }
+    if (dekod[5] == 1)//Dekoderis kai skaiciaus bitus reikia perstumti
+    {
+        Shifter(A, Cntr);
+        cout << "A: " << endl;
+        for (int i = 0; i < 8; i++)
+            cout << A[i] << " ";
+    }
+
+    return 0;
+}
+void bit1ALU(bool a, bool b, bool ENA, bool ENB, bool Cin, bool M0, bool M1, bool& Out, bool& Cout)
+{
+    bool rez1, rez2, rez3, rez4;
+    bool sum;
+    a = AND(a, ENA);
+    b = AND(b, ENB);
+    rez1 = NOT(a);
+    rez2 = NOT(b);
+    rez3 = XOR(a, b);
+    Fadder(a, b, Cin, Cout, sum);
+    rez4 = sum;
+    MUX(rez1, rez2, rez3, rez4, M0, M1, Out, Cout);
+}
+void Shifter(bool A[8], bool Cntr)
+{
+    bool temp[8];
+    temp[0] = AND(A[1], Cntr);
+    temp[1] = OR(AND(A[2], Cntr), AND(A[0], NOT(Cntr)));
+    temp[2] = OR(AND(A[3], Cntr), AND(A[1], NOT(Cntr)));
+    temp[3] = OR(AND(A[4], Cntr), AND(A[2], NOT(Cntr)));
+    temp[4] = OR(AND(A[5], Cntr), AND(A[3], NOT(Cntr)));
+    temp[5] = OR(AND(A[6], Cntr), AND(A[4], NOT(Cntr)));
+    temp[6] = OR(AND(A[7], Cntr), AND(A[5], NOT(Cntr)));
+    temp[7] = AND(A[6], NOT(Cntr));
+    for (int i = 0; i < 8; i++)
+        A[i] = temp[i];
+}
+void MUX(bool rez1, bool rez2, bool rez3, bool rez4, bool M0, bool M1, bool& Out, bool& Cout)
+{
+    bool and1, and2, and3, and4;
+    and1 = AND(AND(rez1, NOT(M0)), NOT(M1));
+    and2 = AND(AND(rez2, NOT(M0)), M1);
+    and3 = AND(AND(rez3, M0), NOT(M1));
+    and4 = AND(AND(rez4, M0), M1);
+    Out = OR(OR(and1, and2), OR(and3, and4));
+}
+void dekoderis(bool D[3], bool dekod[8])
+{
+    dekod[0] = AND(AND(NOT(D[0]), NOT(D[1])), NOT(D[2]));
+    dekod[1] = AND(AND(NOT(D[0]), NOT(D[1])), D[2]);
+    dekod[2] = AND(AND(NOT(D[0]), D[1]), NOT(D[2]));
+    dekod[3] = AND(AND(NOT(D[0]), D[1]), D[2]);
+    dekod[4] = AND(AND(D[0], NOT(D[1])), NOT(D[2]));
+    dekod[5] = AND(AND(D[0], NOT(D[1])), D[2]);
+    dekod[6] = AND(AND(D[0], D[1]), NOT(D[2]));
+    dekod[7] = AND(AND(D[0], D[1]), D[2]);
+
+}
+void Fadder(bool a, bool b, bool Cin, bool& Cout, bool& sum)//cia dar reik suma padaryt
+{
+    bool carry1 = 0, carry2 = 0, sum1, sum2;
+    Hadder(a, b, carry1, sum1);
+    Hadder(sum1, Cin, carry2, sum2);
+    sum = sum2;
+    Cout = OR(carry1, carry2);
+}
+void Hadder(bool a, bool b, bool& carry, bool& sum)
+{
+    sum = XOR(a, b);
+    carry = AND(a, b);
+}
+bool NAND(bool a, bool b)
+{
+    return !(a * b);
+}
+bool NOT(bool a)
+{
+    return NAND(a, a);
+}
+bool OR(bool a, bool b)
+{
+    return NAND(NAND(a, a), NAND(b, b));
+}
+bool AND(bool a, bool b)
+{
+    return NAND(NAND(a, b), NAND(a, b));
+}
+bool XOR(bool a, bool b)
+{
+    bool ab;
+    ab = NAND(a, b);
+    return NAND(NAND(a, ab), NAND(b, ab));
+}
+bool NOR(bool a, bool b)
+{
+    return NAND(NAND(NAND(a, a), NAND(b, b)), NAND(NAND(a, a), NAND(b, b)));
+}
